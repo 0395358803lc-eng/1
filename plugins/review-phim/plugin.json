@@ -1,0 +1,41 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "review-phim",
+  "version": "1.3.0",
+  "description": "Transcript phim và dịch tiếng Việt chính xác theo từng segment; chế độ review đầy đủ tùy chọn.",
+  "author": {
+    "name": "SQY",
+    "email": "hareriatoele@gmail.com"
+  },
+  "keywords": [
+    "review-phim",
+    "transcript",
+    "ASR",
+    "Vietnamese translation",
+    "film-review",
+    "FFmpeg",
+    "workspace",
+    "approval"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "capabilities": [
+          "Interactive"
+        ],
+        "category": "Productivity",
+        "composerIcon": "./assets/icon.png",
+        "defaultPrompt": [
+          "Chạy Transcript-only: nhận dạng lời thoại phim và dịch sát transcript sang tiếng Việt, không QC1.",
+          "Khởi động Review Phim đầy đủ: liệt kê máy chủ để tôi chọn, sau đó hỏi thư mục phim và logo.",
+          "Tiếp tục dự án từ REVIEW_PHIM_WORKSPACE sau khi xác minh máy chủ và đường dẫn."
+        ],
+        "developerName": "SQY",
+        "displayName": "review-phim",
+        "logo": "./assets/icon.png",
+        "longDescription": "Ưu tiên tạo transcript nguồn và dịch chính xác từng segment sang tiếng Việt viết, giữ ID/timecode và xuất tệp UTF-8 không lỗi dấu. Khi người dùng chỉ cần transcript, không chạy QC1, không viết review, không tạo TTS và không dựng/render. Quy trình review đầy đủ 11 giai đoạn chỉ chạy khi được yêu cầu rõ; QC1 đã loại bỏ.",
+        "shortDescription": "Transcript phim và dịch tiếng Việt; review đầy đủ tùy chọn"
+      }
+    }
+  }
+}

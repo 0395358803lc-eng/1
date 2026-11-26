@@ -1,15 +1,7 @@
-# review-phim
+# review-phim 1.3.0
 
-Bản đóng gói các tài liệu và tài nguyên tệp được cung cấp trong plugin skill `review-phim`.
+Plugin hỗ trợ hai chế độ. **Transcript-only** là mặc định khi người dùng chỉ cần transcript và bản dịch tiếng Việt: nhận dạng lời thoại, dịch sát theo từng segment, giữ ID/timecode, xuất TXT/SRT/VTT/JSON với UTF-8 và dấu tiếng Việt đúng; không QC1, không viết review, không TTS, không dựng/render. **Review đầy đủ** chỉ chạy khi người dùng yêu cầu, theo 11 giai đoạn/40 bước và các cổng QC2–QC8.
 
-## Nội dung
-- `skill.md`: hướng dẫn điều phối plugin.
-- `references/`: quy trình 40 bước, 8 cổng QC, vận hành, schema, biên tập và ví dụ.
-- `scripts/`: tiện ích Python kiểm tra timeline và quản lý checkpoint.
-- `templates/`: mẫu cấu hình kênh, dự án và máy chủ.
+**Cơ chế kiểm soát mới:** mỗi bước 01–40 cần một lần xác nhận riêng. Plugin trình bày kế hoạch trước bước, thực hiện đúng một bước sau khi được duyệt, kiểm tra kết quả, lưu checkpoint và báo cáo; sau đó dừng và chỉ hiển thị nút xác nhận cho bước kế tiếp. Các thao tác bootstrap (tạo/nhập workspace, cài dependency, tải model/cache, sao chép logo) có phê duyệt riêng. Không có phê duyệt theo cả giai đoạn và không tự chạy xuyên bước.
 
-## Phạm vi bản sao
-Gói này gồm toàn bộ 12 tệp có URI được cung cấp trong skill bundle tại thời điểm đóng gói. Không bao gồm mã triển khai backend/connector không được cung cấp dưới dạng tệp, dịch vụ bên ngoài, binary, model weights/cache, phim nguồn, dữ liệu workspace, thông tin xác thực hoặc khóa truy cập.
-
-## Lưu ý
-Các cấu hình là mẫu cần được xác minh theo môi trường thực tế. Bundle nguồn không cung cấp tệp LICENSE; việc sao chép lên repository không tự tạo hoặc cấp thêm quyền sử dụng.
+Plugin tiếp tục hỗ trợ workspace chuẩn `REVIEW_PHIM_WORKSPACE`, nhiều máy chủ, bảo toàn nguồn và checkpoint. Không sửa/sao chép phim gốc, không cài global, không tự đăng YouTube.

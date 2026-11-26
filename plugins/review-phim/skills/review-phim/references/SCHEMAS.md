@@ -51,8 +51,23 @@ Không copy phim nguồn vào workspace theo mặc định; config lưu source p
 ## Nhập workspace cũ
 `migration_report.json` ghi source_workspace, import_id, inspected_at, file_manifest, source/config fingerprint comparisons, imported/skipped/stale artefacts, destination paths, conflicts, reasons và approval reference. Nhập không overwrite; file trùng tên được giữ trong namespace/version riêng. Giữ nguyên workspace cũ. Artefact sai fingerprint chỉ được lưu tham khảo và phải đánh stale.
 
-## Approval log
-`approval_log.json` là danh sách sự kiện append-only: {approval_id, scope_type: bootstrap|stage, stage_number optional, scope_description, user_approval_text, approved_at, status, evidence_paths, notes}. Không lưu credentials hoặc ID thiết bị/tài khoản.
+## Approval log — từng bước
+`approval_log.json` là danh sách sự kiện append-only. Mỗi bước có thể có sự kiện bắt đầu và hoàn tất, không ghi đè sự kiện trước đó. Mẫu:
+```json
+{
+  "approval_id": "opaque-local-id",
+  "scope_type": "step",
+  "stage_number": 2,
+  "step_number": 8,
+  "scope_description": "Nhận dạng lời thoại bằng Faster-Whisper",
+  "user_approval_text": "PHÊ DUYỆT THỰC THI ...",
+  "approved_at": "ISO-8601",
+  "status": "started|pass|partial|blocked|stale",
+  "evidence_paths": [],
+  "notes": ""
+}
+```
+Với thao tác bootstrap dùng `scope_type: "bootstrap"`, `step_number: null` và mô tả chính xác thao tác/phạm vi đã duyệt. Không lưu credentials, email hoặc ID thiết bị/tài khoản.
 
 ## Timeline JSON (cho script check_timeline.py)
 ```json
@@ -61,7 +76,7 @@ Không copy phim nguồn vào workspace theo mặc định; config lưu source p
 `fps` có thể là số hoặc phân số string. Frame end exclusive. Nếu speed khác 1, source span/speed phải khớp review duration trong dung sai. Script hỗ trợ hard-cut liên tục; transition overlap cần validate bổ sung. Không lấy output helper làm bằng chứng nội dung khớp.
 
 ## State
-`workflow_state.py init --state PATH --job-id ID --source-fingerprint FINGERPRINT` tạo 40 bước pending, không overwrite. `mark --state PATH --step 9 --status pass --evidence FILE --note ...` chỉ dùng pass khi kiểm tra thật. `resume` tìm bước chưa đạt đầu tiên; `invalidate --from-step N --note REASON` đánh stale downstream, giữ lịch sử. ChatGPT kiểm tra fingerprints và invalidate có chủ ý. Không có hai phiên cùng ghi một state.
+`workflow_state.py init --state PATH --job-id ID --source-fingerprint FINGERPRINT` tạo 40 bước pending, không overwrite. `mark --state PATH --step 9 --status pass --evidence FILE --note ...` chỉ dùng pass khi kiểm tra thật. `resume` tìm bước chưa đạt đầu tiên; `invalidate --from-step N --note REASON` đánh stale downstream, giữ lịch sử. ChatGPT kiểm tra fingerprints và invalidate có chủ ý. Không có hai phiên cùng ghi một state. State là checkpoint kỹ thuật; approval log mới là bằng chứng người dùng đã phê duyệt từng bước.
 
 ## Báo cáo bàn giao
 Kèm đường dẫn file đã kiểm tra, size/duration/frame/codec/resolution/fps, audio/stems, subtitle, thumbnail/metadata, status 8 gates, phạm vi QC, lỗi tồn tại, quyết định chưa được duyệt, nguồn giữ nguyên và quyền xuất bản chưa kiểm chứng. Không dùng số liệu ví dụ làm số liệu job.

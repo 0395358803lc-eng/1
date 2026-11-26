@@ -30,11 +30,16 @@
 - Package Python cài vào `REVIEW_PHIM_WORKSPACE/shared/python/.venv` hoặc venv có tên/version tương đương. Model/cache vào `shared/models` và `shared/cache`. Binary portable vào `shared/bin` khi license/OS cho phép. Không cài global, không thay đổi PATH/system policy, không tự cập nhật OS/driver. Không tải model lớn hoặc tạo chi phí khi chưa duyệt. Driver/system dependencies là blocker cần user xử lý.
 - Test thực tế sau cài: import, load/infer offline nếu cache đầy đủ, 2–10s decode/encode, scene detect, smoke test TTS/ASR nếu có. Không đánh pass chỉ vì package xuất hiện trong danh sách.
 
-## Phê duyệt từng giai đoạn
-- Trước mỗi một trong 11 giai đoạn, trình bày kế hoạch/đầu vào/thao tác/risks/outputs rồi hiển thị một nút `Thực thi Giai đoạn N`. Chỉ chạy đúng giai đoạn sau khi user click hoặc nhập câu phê duyệt nêu rõ giai đoạn. Sau khi hoàn tất và báo evidence mới hiện nút của giai đoạn kế tiếp. Không hiển thị nút cho các giai đoạn tương lai cùng lúc và không tự chạy xuyên giai đoạn.
-- Dùng DIL button với callback `GenUI.issueNewTurn(...)` để gửi câu phê duyệt cụ thể. Nếu UI không hỗ trợ, yêu cầu xác nhận bằng văn bản.
-- Các bước bootstrap tạo root, import workspace, cài dependencies cũng có nút duyệt riêng. Phê duyệt một giai đoạn không đồng nghĩa duyệt xóa/ghi đè, crop không phục hồi, cài hệ thống, download lớn/chi phí, chia sẻ hoặc xuất bản.
-- Lưu `approval_log.json` với stage, scope, approval text/action, timestamp, status, evidence. Không lưu ID tài khoản/thiết bị hoặc token.
+## Phê duyệt từng bước — bắt buộc
+- Mỗi bước được đánh số 01–40 là một đơn vị phê duyệt độc lập. Giai đoạn chỉ là nhóm tổ chức, không phải đơn vị cấp quyền; không dùng nút `Thực thi Giai đoạn N`.
+- Trước mỗi bước, trình bày số bước, mục tiêu, đầu vào, thao tác, đầu ra, rủi ro và phạm vi thay đổi; sau đó chỉ hiển thị một nút `Thực thi bước NN`.
+- Callback nút dùng `GenUI.issueNewTurn(...)`, gửi câu xác nhận gồm job, giai đoạn, số bước và chỉ thị không chạy bước kế tiếp. Nếu UI không hỗ trợ, yêu cầu câu xác nhận bằng văn bản nêu rõ bước.
+- Chỉ chạy bước được duyệt. Sau khi hoàn tất, kiểm tra kết quả, lưu checkpoint/approval log, báo `pass / partial / blocked / stale`, bằng chứng, tệp, số liệu, lỗi và giới hạn; rồi dừng.
+- Sau báo cáo mới hiện nút cho bước pending kế tiếp. Không tự chạy bước kế tiếp dù cùng giai đoạn hoặc khi người dùng từng yêu cầu “chạy toàn bộ”.
+- Nếu bước bị block/partial, dừng ở đó. Chỉ cho phép bổ sung thông tin hoặc duyệt chạy lại đúng bước; không bỏ qua. Bước pass chỉ chạy lại khi nêu lý do và xin duyệt lại.
+- Các thao tác bootstrap ngoài 40 bước (tạo workspace, nhập workspace, cài dependencies, tải model/cache, copy logo) có phê duyệt riêng theo từng thao tác hoặc nhóm có phạm vi cụ thể.
+- Phê duyệt một bước không bao gồm xóa/ghi đè, crop/mask không phục hồi, cài hệ thống/driver, download lớn/chi phí, chuyển dữ liệu ra ngoài, chia sẻ hoặc xuất bản; các hành động này cần xác nhận riêng.
+- Lưu `approval_log.json` append-only với `scope_type: step|bootstrap`, `stage_number`, `step_number` (nếu là bước), phạm vi, văn bản xác nhận, thời điểm, trạng thái, evidence paths và notes. Ghi cả sự kiện bắt đầu và kết quả hoàn tất; không lưu ID thiết bị/tài khoản hoặc token.
 
 ## Kỹ thuật và an toàn vận hành
 - Dùng công cụ remote/local đã kết nối và được cấp quyền. Với Remote Desktop Commander, khám phá đúng action hiện tại; đọc OS và shell. Windows thường dùng PowerShell, Linux/macOS dùng shell phù hợp. Quote đường dẫn có dấu/khoảng trắng; ưu tiên subprocess argument list. Tool trả ảnh phải chuyển block ảnh để ChatGPT nhìn; không dựa vào tên file.
