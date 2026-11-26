@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "job_id": null,
+  "source_path": null,
+  "source_fingerprint": null,
+  "source_language": "auto-detect-and-confirm",
+  "audio_track": null,
+  "workspace_path": null,
+  "server_profile_snapshot": null,
+  "channel_profile_snapshot": null,
+  "overrides": {},
+  "sampling": {"initial_seconds": 5, "verification_seconds": 1},
+  "permissions": {"source_use_rights": "unverified", "external_transfer": false, "publish": false},
+  "preserve_source": true,
+  "mode": "stage-by-stage-or-full-as-requested"
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "server_alias": null,
+  "executor": null,
+  "os": null,
+  "shell": null,
+  "authorized_workspace_root": null,
+  "shared_tools_root": null,
+  "python_executable": null,
+  "ffmpeg_executable": null,
+  "ffprobe_executable": null,
+  "model_cache_root": null,
+  "hardware": {"cpu": null, "ram_gib": null, "gpu": null, "vram_mib": null, "free_disk_gib": null},
+  "tested": {"asr_device": null, "tts_device": null, "encoder": null, "decoder": null, "ffmpeg_version": null, "python_version": null},
+  "allow_cpu_fallback": true
+}
