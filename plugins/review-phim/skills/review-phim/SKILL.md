@@ -2,7 +2,7 @@
 name: review-phim
 description: "Dùng khi người dùng gọi review-phim để tạo transcript từ phim, dịch transcript sang tiếng Việt, hoặc thực hiện quy trình review phim đầy đủ theo yêu cầu. Hỗ trợ workspace chuẩn, nhiều máy chủ và phê duyệt độc lập từng bước."
 ---
-# review-phim — quy trình điều phối 1.4
+# review-phim — quy trình điều phối 1.5
 
 Mục tiêu: ưu tiên đúng phạm vi người dùng yêu cầu. Khi người dùng chỉ cần transcript và bản dịch tiếng Việt, dùng **Chế độ Transcript-only**; không tự mở rộng sang phân tích hình ảnh, viết review, TTS, dựng phim, hậu kỳ hay YouTube. Chỉ dùng quy trình review đầy đủ khi người dùng yêu cầu rõ.
 
@@ -36,13 +36,18 @@ Chỉ chọn khi người dùng yêu cầu viết review, hiểu phim qua hình 
 
 **Đơn vị phê duyệt là từng bước được đánh số (01–40), không phải cả giai đoạn.** Tên giai đoạn chỉ dùng để nhóm bước; không có nút “duyệt cả giai đoạn” và không được hiểu phê duyệt một bước là phê duyệt các bước còn lại.
 
-### Cổng thực thi bắt buộc (v1.4)
+### Cổng thực thi bắt buộc (v1.4, giữ nguyên trong v1.5)
 - Đọc `references/APPROVAL-GUARD.md`. Sau bootstrap được duyệt, khởi tạo state v2 đúng job, mode và fingerprint; dùng đúng script `scripts/workflow_state.py` trên workspace đã xác nhận. Không dùng `mark` cũ. Nếu script không chạy được hoặc từ chối, dừng và báo blocker; không gọi lệnh media thay thế, không tự sửa state.
 - Trước mỗi bước dùng `resume`, đối chiếu fingerprint nguồn/cấu hình thực tế và evidence; dùng `prepare` cho đúng bước kế tiếp để nhận `approval_request.expected_text`. Báo kế hoạch, mục tiêu, phạm vi, dữ liệu, đầu ra và tác động dự kiến. Hiện đúng một nút gửi nguyên văn `expected_text` qua lượt hội thoại mới; nếu không có nút thì yêu cầu người dùng gửi đúng câu đó. Mã yêu cầu là riêng của job/bước/lần thử, không dùng mã ví dụ.
 - Chỉ khi người dùng thực sự gửi câu xác nhận của yêu cầu hiện tại, gọi `start` với nguyên văn tin nhắn đó. Tuyệt đối không tự tạo lời xác nhận hoặc tự gọi `start` từ nội dung nút/kế hoạch, log cũ hoặc yêu cầu chung. Chỉ khi `start` thành công và trả `attempt_id` mới được thực thi bước đó. Không chạy bước khác, không chạy media trước cổng.
 - Sau khi lệnh thực tế kết thúc, kiểm tra artefact/evidence, gọi `finish` với attempt_id tương ứng, trạng thái và ghi chú. `pass` cần bằng chứng thực tế. Script tự ghi state và approval log. Báo cáo kết quả, lỗi/giới hạn, đường dẫn, số liệu, trạng thái và **dừng**. Chỉ chuẩn bị/hiển thị nút cho bước hợp lệ tiếp theo; không `start` trong lượt này. Nếu partial/blocked thì chỉ thử lại đúng bước bằng mã xác nhận mới sau khi xử lý nguyên nhân.
 - Nếu còn trạng thái running thì kiểm tra process/tool call thực tế; không chạy lại. Nếu mất kết nối, giữ running, chỉ kết thúc blocked sau khi xác minh process đã dừng. Khi evidence thay đổi, dừng, trình bày kế hoạch invalidate và xin duyệt; không tự ghi đè. Khi đổi source/config/mode, bảo toàn job cũ, xin duyệt tạo job v2 riêng; không chuyển quyền cũ sang job mới. State v1 chỉ đọc kiểm kê, không tự nâng cấp hoặc suy diễn phê duyệt.
 - Cổng script kiểm tra quy trình, không xác thực nguồn tin nhắn ChatGPT hay khóa được lệnh shell ngoài script. ChatGPT phải tuân thủ quy tắc này và không lách cổng. Bootstrap và các hành động nhạy cảm tiếp tục yêu cầu phê duyệt riêng.
+
+### Cổng chọn giọng đọc bắt buộc (v1.5, chỉ Review đầy đủ)
+- Đọc `references/VOICE-SELECTION.md`. Sau khi báo cáo bước 21, trước `prepare` bước 22, kiểm kê read-only danh mục giọng thực sự có trên engine/máy đã chọn. Dùng `offer-voices` để lập yêu cầu chọn giọng theo job. Hiện danh sách tên/ID giọng và engine đã xác minh; không tự chọn sẵn, kể cả khi chỉ có một giọng hoặc profile cũ có `voice_preferred`. Nếu không có giọng khả dụng, báo blocked và xin duyệt riêng các thao tác cần thiết; không tự tải/cài, không fallback.
+- Hỏi người dùng chọn giọng, dừng. Nút xác nhận lựa chọn chỉ gửi câu chọn giọng do guard tạo; không cấp quyền TTS. Chỉ gọi `select-voice` với nguyên văn lượt trả lời của người dùng. Sau đó báo lại giọng đã chọn, lập kế hoạch và hiện một nút duyệt riêng cho bước 22. Không synthesize kể cả mẫu thử nếu chưa có phê duyệt phù hợp. Không dùng giọng mặc định, không tự đổi giọng khi lỗi.
+- `prepare` và `start` bước 22/24 phải qua guard v1.5 có voice_selection; `start` trả thông tin giọng đã ràng buộc để dùng đúng engine/voice_id. Bước 24 chỉ tạo candidate bằng giọng đã được chọn ở bước 22. Nếu muốn đổi giọng, hoặc job cũ không có bằng chứng lựa chọn, trình bày kế hoạch invalidate từ bước 22, xin duyệt, giữ artefact cũ và yêu cầu chọn giọng mới; không tự đổi. Kiểm tra lại giọng khả dụng trước thực thi; nếu mất, báo blocked. Mỗi lần chạy TTS vẫn cần phê duyệt đúng bước. Transcript-only không hỏi giọng và không chạy TTS.
 
 ### Bootstrap và thao tác nhạy cảm
 - Các thao tác ngoài danh sách 40 bước như tạo workspace, nhập workspace cũ, cài dependency, tải model/cache hoặc sao chép logo đều cần kế hoạch và **phê duyệt riêng cho từng thao tác/nhóm cài đặt có phạm vi cụ thể**. Không gộp chúng vào một chấp thuận chung.

@@ -1,4 +1,4 @@
-# Quy trình review-phim 1.4 — Transcript-first, phê duyệt từng bước
+# Quy trình review-phim 1.5 — Transcript-first, phê duyệt từng bước
 
 Quy trình có hai chế độ:
 - **Transcript-only:** mặc định khi người dùng chỉ yêu cầu transcript/phụ đề và bản dịch tiếng Việt. Chỉ chạy chuẩn bị cần thiết (nếu chưa có) và Giai đoạn 2, sau đó bàn giao và dừng.
@@ -55,9 +55,12 @@ Tuân thủ `../SKILL.md` và `APPROVAL-GUARD.md`: mỗi bước 01–40 là m�
 
 ## Giai đoạn 6 — Giọng đọc (21–24, chỉ Review đầy đủ)
 21. Chia kịch bản thành đoạn/câu, giữ ID và nguyên văn.
-22. Tạo TTS bằng preset/thiết bị đã xác minh; lưu WAV từng đoạn và master.
+
+**Cổng bắt buộc giữa bước 21 và 22:** báo cáo bước 21, chỉ kiểm kê giọng khả dụng; hiển thị danh sách không chọn sẵn, hỏi người dùng chọn giọng và dừng. Ghi nhận lựa chọn qua `offer-voices` / `select-voice`. Sau khi chọn xong, mới `prepare` bước 22, hiển thị nút phê duyệt riêng và chờ xác nhận. Không tạo audio, kể cả mẫu, trước khi có lựa chọn và quyền thực thi phù hợp. Xem `VOICE-SELECTION.md`.
+
+22. Tạo TTS bằng engine và voice_id được người dùng chọn rõ qua cổng `VOICE-SELECTION.md`, sau phê duyệt riêng bước 22; kiểm tra giọng khả dụng, lưu WAV từng đoạn và master, không fallback/default.
 23. Dùng ASR ngược làm chỉ báo sai khác, không coi là nghe trực tiếp.
-24. Tạo candidate sửa, chọn bản có căn cứ, ghép Final và timeline. QC4.
+24. Tạo candidate sửa bằng đúng giọng đã chọn tại bước 22, chọn bản có căn cứ, ghép Final và timeline. Nếu muốn đổi giọng, xin duyệt invalidate từ bước 22 rồi chọn lại; không tự đổi. QC4.
 
 ## Giai đoạn 7 — Timeline hình ảnh (25–28, chỉ Review đầy đủ)
 25. Chia lời đọc Final theo đơn vị ngữ nghĩa và căn thời gian.

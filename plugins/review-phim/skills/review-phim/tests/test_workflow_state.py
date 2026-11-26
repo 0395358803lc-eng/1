@@ -83,7 +83,9 @@ class GuardTests(unittest.TestCase):
         d=json.loads(self.state.read_text()); d['schema_version']=1; self.state.write_text(json.dumps(d)); self.run_cli('resume',ok=False)
     def test_22_full_mode(self):
         self.state=self.root/'full'/'state.json'; self.run_cli('init','--mode','full-review')
-        for n in range(1,41): self.complete(n)
+        for n in range(1,41):
+            if n == 22: self.choose(self.offer()['options'][0])
+            self.complete(n)
         self.assertIsNone(self.run_cli('resume')['next_step'])
     def test_23_running_blocks_invalidate(self):
         self.start(1,self.prepare(1)); self.run_cli('invalidate','--from-step',1,'--note','test',ok=False)
@@ -95,5 +97,74 @@ class GuardTests(unittest.TestCase):
     def test_26_mandatory_transcript_not_skippable(self):
         for n in range(1,7): self.complete(n)
         r=self.run_cli('prepare','--step',7,'--scope','BỎ QUA: test')['approval_request']; self.finish(7,self.start(7,r),'skipped',ok=False)
+
+    def full_to_voice(self):
+        self.state=self.root/'full'/'state.json'
+        self.run_cli('init','--mode','full-review')
+        for n in range(1,22): self.complete(n)
+    def offer(self, voices=None, ok=True):
+        catalog=self.root/'voice-catalog.json'
+        if voices is None:
+            voices=[{'engine':'synthetic-engine-1','voice_id':'a','display_name':'Giọng A'}, {'engine':'synthetic-engine-1','voice_id':'b','display_name':'Giọng B'}]
+        catalog.write_text(json.dumps(voices,ensure_ascii=False),encoding='utf-8')
+        result=self.run_cli('offer-voices','--catalog',catalog,ok=ok)
+        return result['voice_choice_request'] if ok else result
+    def choose(self, option, ok=True):
+        return self.run_cli('select-voice','--selection-text',option['expected_text'],ok=ok)
+    def test_27_no_default_voice(self):
+        self.full_to_voice()
+        self.assertEqual(self.run_cli('resume')['status'],'waiting_voice_selection')
+        self.run_cli('prepare','--step',22,'--scope','default voice',ok=False)
+        self.run_cli('start','--step',22,'--approval-text','Tiếp tục',ok=False)
+    def test_28_choice_not_execution_approval(self):
+        self.full_to_voice(); option=self.offer()['options'][1]
+        result=self.choose(option); self.assertEqual(result['voice_selection']['voice_id'],'b')
+        self.assertIsNone(result['running_step']); self.assertIsNone(result['approval_request'])
+        r=self.prepare(22); self.assertIn('Giọng B',r['expected_text'])
+        self.run_cli('start','--step',22,'--approval-text',option['expected_text'],ok=False)
+        self.finish(22,self.start(22,r))
+        d=json.loads(self.state.read_text()); self.assertEqual(d['steps'][21]['attempt']['voice_selection']['voice_id'],'b')
+        self.assertEqual(d['steps'][22]['status'],'pending')
+        log=json.loads(self.state.with_name('approval_log.json').read_text())
+        self.assertEqual([e['status'] for e in log if e['step_number']==22],['selected','started','pass'])
+    def test_29_single_voice_requires_choice(self):
+        self.full_to_voice(); offer=self.offer([{'engine':'e','voice_id':'one','display_name':'Only'}])
+        self.assertIsNone(self.run_cli('resume')['voice_selection'])
+        self.run_cli('prepare','--step',22,'--scope','one voice',ok=False)
+        self.choose(offer['options'][0]); self.complete(22)
+    def test_30_empty_invalid_catalog(self):
+        self.full_to_voice(); self.offer([],ok=False); self.offer([{'engine':'e','voice_id':'','display_name':'bad'}],ok=False)
+        self.assertIsNone(self.run_cli('resume')['voice_selection'])
+    def test_31_stale_and_wrong_voice_choice(self):
+        self.full_to_voice(); old=self.offer()['options'][0]; new=self.offer()['options'][1]
+        self.choose(old,ok=False); self.run_cli('select-voice','--selection-text','Trúc Ly',ok=False)
+        self.choose(new); self.choose(new,ok=False)
+    def test_32_step24_bound_to_same_voice(self):
+        self.full_to_voice(); self.choose(self.offer()['options'][1]); self.complete(22); self.complete(23)
+        self.offer(ok=False); r=self.prepare(24); self.assertEqual(r['voice_selection']['voice_id'],'b')
+        self.finish(24,self.start(24,r))
+        self.assertEqual(json.loads(self.state.read_text())['steps'][23]['attempt']['voice_selection']['voice_id'],'b')
+    def test_33_invalidation_clears_voice(self):
+        self.full_to_voice(); self.choose(self.offer()['options'][0]); r=self.prepare(22)
+        self.run_cli('invalidate','--from-step',22,'--note','approved voice change')
+        self.assertIsNone(self.run_cli('resume')['voice_selection']); self.run_cli('start','--step',22,'--approval-text',r['expected_text'],ok=False)
+        self.choose(self.offer()['options'][1]); self.complete(22)
+    def test_34_transcript_no_voice(self):
+        self.offer(ok=False); self.run_cli('select-voice','--selection-text','any',ok=False)
+        self.assertIsNone(self.run_cli('resume')['voice_selection'])
+    def test_35_voice_change_while_execution_pending_or_running(self):
+        self.full_to_voice(); self.choose(self.offer()['options'][0]); r=self.prepare(22)
+        self.offer(ok=False); a=self.start(22,r); self.offer(ok=False)
+        self.finish(22,a,'blocked',False); self.choose(self.offer()['options'][1]); self.complete(22)
+    def test_36_legacy_step22_request_blocked(self):
+        self.full_to_voice(); d=json.loads(self.state.read_text()); d['request']={'id':'old','step':22,'scope':'old','expected_text':'old-approval','created_at':'old'}; d['steps'][21]['status']='waiting_approval'
+        self.state.write_text(json.dumps(d)); self.run_cli('start','--step',22,'--approval-text','old-approval',ok=False)
+        self.run_cli('cancel','--step',22,'--request-id','old','--note','upgrade'); self.choose(self.offer()['options'][0]); self.complete(22)
+    def test_37_legacy_step24_requires_review(self):
+        self.full_to_voice(); self.choose(self.offer()['options'][0]); self.complete(22); self.complete(23)
+        d=json.loads(self.state.read_text()); d.pop('voice_selection'); d['steps'][21]['attempt'].pop('voice_selection'); self.state.write_text(json.dumps(d))
+        self.run_cli('prepare','--step',24,'--scope','legacy',ok=False)
+    def test_38_no_skip_tts(self):
+        self.full_to_voice(); self.choose(self.offer()['options'][0]); r=self.run_cli('prepare','--step',22,'--scope','BỎ QUA: test')['approval_request']; self.finish(22,self.start(22,r),'skipped',ok=False)
 
 if __name__=='__main__': unittest.main(verbosity=2)

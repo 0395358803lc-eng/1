@@ -3,7 +3,7 @@
   "channel_id": null,
   "display_name": null,
   "language": "vi",
-  "narration": {"person": "third", "tone": "cinematic-natural", "target_duration_minutes": null, "tts_engine_preferred": "VieNeu V3 Turbo", "voice_preferred": "Trúc Ly", "paragraph_gap_seconds": 0.32},
+  "narration": {"person": "third", "tone": "cinematic-natural", "target_duration_minutes": null, "tts_engine_preferred": "VieNeu V3 Turbo", "voice_preferred": null, "voice_selection_policy": "explicit-per-job-no-default", "paragraph_gap_seconds": 0.32},
   "brand": {"logo_path": null, "position": "top-left", "width_fraction": 0.0833, "margin_fraction_of_width": 0.0125, "preserve_alpha": true, "colors": []},
   "subtitle": {"enabled": true, "language": "vi", "font_preferred": "Arial", "max_lines": 2, "style": "white bold", "old_subtitle_method": "inspect-then-decide"},
   "music": {"enabled": true, "style": "light instrumental ambient", "source": "original-or-licensed", "duck_max_db": 5, "fade_in_seconds": 3, "fade_out_seconds": 5, "voice_lufs_target": -18, "bed_lufs_target": -32, "mix_true_peak_ceiling_dbtp": -1},

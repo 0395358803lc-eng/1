@@ -15,6 +15,7 @@ GOOD = {'pass', 'skipped'}
 MODES = {'transcript-only': 9, 'full-review': 40}
 STAGES = (6, 9, 12, 16, 20, 24, 28, 32, 36, 39, 40)
 FINISH = ('pass', 'partial', 'blocked', 'skipped')
+VOICE_STEPS = (22, 24)
 
 
 def now():
@@ -101,6 +102,37 @@ def check_identity(d, a):
     need(a.config_fingerprint == d['config_fingerprint'], 'config fingerprint changed; stop and review')
 
 
+def voice_options(d, catalog):
+    need(isinstance(catalog, list) and 0 < len(catalog) <= 500, 'nonempty verified voice catalog required')
+    items, seen = [], set()
+    rid = secrets.token_hex(16)
+    for row in catalog:
+        need(isinstance(row, dict), 'invalid voice entry')
+        entry = {}
+        for key in ('engine', 'voice_id', 'display_name'):
+            value = row.get(key)
+            need(isinstance(value, str) and 0 < len(value.strip()) <= 200 and value == value.strip() and all(c.isprintable() for c in value), 'invalid voice field: ' + key)
+            entry[key] = value
+        pair = (entry['engine'], entry['voice_id'])
+        need(pair not in seen, 'duplicate engine/voice ID')
+        seen.add(pair)
+        label = json.dumps(entry, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+        entry['expected_text'] = f'CHỌN GIỌNG ĐỌC: Job {d["job_id"]}; Bước 22; Mã {rid}; Giọng: {label}'
+        items.append(entry)
+    return {'id': rid, 'options': items, 'created_at': now()}
+
+
+def require_voice(d, step):
+    if step not in VOICE_STEPS:
+        return None
+    voice = d.get('voice_selection')
+    need(isinstance(voice, dict) and all(voice.get(k) for k in ('id', 'engine', 'voice_id', 'display_name', 'user_selection_text')), 'explicit voice selection required; offer voices first at step 22')
+    if step == 24:
+        previous = d['steps'][21]
+        need(previous['status'] == 'pass' and previous.get('attempt', {}).get('voice_selection') == voice, 'step 22 voice evidence missing or changed; review and invalidate from 22 with approval')
+    return voice
+
+
 def event(d, s, status, note='', evidence=()):
     attempt = s['attempt']
     d['events'].append({'event_id': secrets.token_hex(16), 'approval_id': attempt['id'],
@@ -108,6 +140,8 @@ def event(d, s, status, note='', evidence=()):
         'step_number': s['step'], 'scope_description': attempt['scope'],
         'user_approval_text': attempt['approval_text'], 'approved_at': attempt['approved_at'],
         'timestamp': now(), 'status': status, 'evidence_paths': [e['path'] for e in evidence], 'notes': note})
+    if attempt.get('voice_selection'):
+        d['events'][-1]['voice_selection'] = attempt['voice_selection']
 
 
 def sync_log(path, d):
@@ -142,9 +176,9 @@ def info(d):
     if issues:
         n = min([i['step'] for i in issues] + ([n] if n is not None else []))
     return {'job_id': d['job_id'], 'mode': d['mode'], 'next_step': n,
-            'status': 'running' if r else 'stale' if issues else 'complete' if n is None else d['steps'][n-1]['status'],
+            'status': 'running' if r else 'stale' if issues else 'complete' if n is None else 'waiting_voice_selection' if n == 22 and not d.get('voice_selection') else d['steps'][n-1]['status'],
             'running_step': r['step'] if r else None, 'evidence_changes': issues,
-            'approval_request': d.get('request')}
+            'approval_request': d.get('request'), 'voice_choice_request': d.get('voice_choice_request'), 'voice_selection': d.get('voice_selection')}
 
 
 def num(v):
@@ -157,7 +191,7 @@ def num(v):
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest='cmd', required=True)
-    for name in ('init', 'resume', 'prepare', 'start', 'finish', 'invalidate', 'cancel'):
+    for name in ('init', 'resume', 'prepare', 'start', 'finish', 'invalidate', 'cancel', 'offer-voices', 'select-voice'):
         q = sub.add_parser(name)
         q.add_argument('--state', required=True, type=Path)
         if name != 'resume':
@@ -168,6 +202,10 @@ def parser():
             q.add_argument('--mode', choices=MODES, required=True)
         if name in ('prepare', 'start', 'finish', 'cancel'):
             q.add_argument('--step', type=num, required=True)
+        if name == 'offer-voices':
+            q.add_argument('--catalog', required=True, type=Path)
+        if name == 'select-voice':
+            q.add_argument('--selection-text', required=True)
         if name == 'prepare':
             q.add_argument('--scope', required=True)
         if name == 'start':
@@ -198,7 +236,7 @@ def execute(a):
             d = {'schema_version': 2, 'job_id': a.job_id, 'mode': a.mode,
                  'source_fingerprint': a.source_fingerprint, 'config_fingerprint': a.config_fingerprint,
                  'steps': [{'step': i, 'status': 'pending' if i <= MODES[a.mode] else 'out_of_scope'} for i in range(1, 41)],
-                 'request': None, 'events': [], 'history': []}
+                 'request': None, 'events': [], 'history': [], 'voice_choice_request': None, 'voice_selection': None}
             # Validate existing log before making state durable.
             log = p.with_name('approval_log.json')
             if log.exists():
@@ -211,7 +249,27 @@ def execute(a):
             return info(d)
         check_identity(d, a)
         r = running(d)
-        if a.cmd == 'invalidate':
+        if a.cmd in ('offer-voices', 'select-voice'):
+            need(d['mode'] == 'full-review' and next_step(d) == 22, 'voice selection is only allowed at pending step 22')
+            need(not r and not d.get('request'), 'cancel pending execution approval first; no changes while running')
+            need(not evidence_issues(d), 'evidence changed; review and invalidate first')
+            if a.cmd == 'offer-voices':
+                offer = voice_options(d, read(a.catalog))
+                if d.get('voice_choice_request') or d.get('voice_selection'):
+                    d['history'].append({'at': now(), 'previous_voice_request': d.get('voice_choice_request'), 'previous_voice_selection': d.get('voice_selection')})
+                d['voice_choice_request'] = offer
+                d['voice_selection'] = None
+            else:
+                offer = d.get('voice_choice_request')
+                need(offer is not None, 'no pending voice choice')
+                chosen = next((o for o in offer['options'] if o['expected_text'] == a.selection_text), None)
+                need(chosen is not None, 'voice selection must match a current offered option exactly')
+                selected = {k: chosen[k] for k in ('engine', 'voice_id', 'display_name')}
+                selected.update(id=offer['id'], user_selection_text=a.selection_text, selected_at=now())
+                d['voice_selection'] = selected
+                d['voice_choice_request'] = None
+                d['events'].append({'event_id': secrets.token_hex(16), 'approval_id': offer['id'], 'job_id': d['job_id'], 'scope_type': 'voice_selection', 'stage_number': 6, 'step_number': 22, 'status': 'selected', 'timestamp': now(), 'voice_selection': selected, 'user_approval_text': a.selection_text, 'notes': 'Voice choice only; not permission to synthesize'})
+        elif a.cmd == 'invalidate':
             need(not r, 'running step must be reconciled before invalidation')
             need(a.from_step <= MODES[d['mode']], 'step outside mode')
             need(bool(a.note.strip()), 'reason required')
@@ -225,6 +283,11 @@ def execute(a):
             if req and req['step'] < a.from_step:
                 d['steps'][req['step']-1]['status'] = 'pending'
             d['request'] = None
+            if a.from_step <= 22:
+                if d.get('voice_choice_request') or d.get('voice_selection'):
+                    d['history'].append({'at': now(), 'previous_voice_request': d.get('voice_choice_request'), 'previous_voice_selection': d.get('voice_selection'), 'reason': a.note})
+                d['voice_choice_request'] = None
+                d['voice_selection'] = None
         else:
             need(a.step <= MODES[d['mode']], 'step outside mode')
             s = d['steps'][a.step-1]
@@ -234,7 +297,7 @@ def execute(a):
                 ev = [{'path': str(e.resolve()), 'sha256': sha(e.resolve())} for e in a.evidence]
                 need(a.status not in GOOD or bool(ev), 'pass/skipped requires evidence')
                 if a.status == 'skipped':
-                    need(a.step not in (7, 8, 9), 'mandatory transcript step cannot be skipped')
+                    need(a.step not in (7, 8, 9, 22), 'mandatory transcript or TTS step cannot be skipped')
                     need(s['attempt']['scope'].startswith('BỎ QUA:'), 'skip requires explicit approved BỎ QUA scope')
                 s.update(status=a.status, evidence=ev, note=a.note, updated_at=now())
                 event(d, s, a.status, a.note, ev)
@@ -244,14 +307,19 @@ def execute(a):
                 need(a.step == next_step(d), 'not the next eligible step')
                 req = d.get('request')
                 if a.cmd == 'prepare':
+                    voice = require_voice(d, a.step)
                     need(bool(a.scope.strip()), 'scope required')
                     if req:
                         need(req['step'] == a.step and req['scope'] == a.scope, 'cancel old request before changing scope')
+                        need(req.get('voice_selection') == voice, 'cancel outdated approval request before preparing voice-bound execution')
                         return info(d)
                     rid = secrets.token_hex(16)
                     stage = next(i for i, end in enumerate(STAGES, 1) if a.step <= end)
                     expected = f'PHÊ DUYỆT THỰC THI: Job {d["job_id"]}; Giai đoạn {stage}; Bước {a.step:02d}; Mã {rid}; Phạm vi: {a.scope}'
                     d['request'] = {'id': rid, 'step': a.step, 'scope': a.scope, 'expected_text': expected, 'created_at': now()}
+                    if voice:
+                        d['request']['voice_selection'] = voice
+                        d['request']['expected_text'] += '; Giọng đọc: ' + json.dumps({k: voice[k] for k in ('engine', 'voice_id', 'display_name', 'id')}, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
                     s['status'] = 'waiting_approval'
                 elif a.cmd == 'cancel':
                     need(req and req['id'] == a.request_id and req['step'] == a.step, 'no matching request')
@@ -260,11 +328,15 @@ def execute(a):
                     d['request'] = None
                     s['status'] = 'pending'
                 elif a.cmd == 'start':
+                    voice = require_voice(d, a.step)
                     need(req and req['step'] == a.step and s['status'] == 'waiting_approval', 'no pending approval request')
+                    need(req.get('voice_selection') == voice, 'voice not bound to approval; cancel and prepare again')
                     need(a.approval_text == req['expected_text'], 'approval must match exact current job, step, scope and request')
                     if 'attempt' in s:
                         d['history'].append({'at': now(), 'previous': dict(s)})
                     s['attempt'] = {'id': req['id'], 'scope': req['scope'], 'approval_text': a.approval_text, 'approved_at': now()}
+                    if voice:
+                        s['attempt']['voice_selection'] = voice
                     s['status'] = 'running'
                     d['request'] = None
                     event(d, s, 'started')
