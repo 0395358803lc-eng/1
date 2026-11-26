@@ -1,4 +1,4 @@
-# Quy trình review-phim 1.3 — Transcript-first, phê duyệt từng bước
+# Quy trình review-phim 1.4 — Transcript-first, phê duyệt từng bước
 
 Quy trình có hai chế độ:
 - **Transcript-only:** mặc định khi người dùng chỉ yêu cầu transcript/phụ đề và bản dịch tiếng Việt. Chỉ chạy chuẩn bị cần thiết (nếu chưa có) và Giai đoạn 2, sau đó bàn giao và dừng.
@@ -16,22 +16,8 @@ F. Nếu không có workspace cũ, khảo sát OS/CPU/RAM/GPU/VRAM/disk, Python/
 G. Cài package Python trong `shared/python/`, model/cache trong `shared/models/` và `shared/cache/`, binary portable trong `shared/bin/`. Không cài global, không đổi OS/driver/PATH hệ thống, không tải lớn hoặc phát sinh chi phí khi chưa duyệt.
 H. Tạo/tiếp tục job tại `jobs/<job-id>/`; không copy phim gốc. Mọi thao tác ghi/tạo/cài đặt đều cần phê duyệt riêng.
 
-## Cơ chế phê duyệt từng bước — áp dụng bắt buộc
-1. **Mỗi số bước là một đơn vị phê duyệt riêng.** Các tiêu đề Giai đoạn 1–11 chỉ để nhóm bước, không phải phạm vi phê duyệt. Không có nút duyệt cả giai đoạn.
-2. Trước từng bước, kiểm tra checkpoint và chỉ chọn bước pending tiếp theo. Nêu số bước, tên, giai đoạn, job, mục tiêu, đầu vào, thao tác, đầu ra, rủi ro và thay đổi dự kiến.
-3. Hiển thị đúng **một nút** `Thực thi bước NN`. Callback phải gửi câu phê duyệt nêu rõ job, giai đoạn, số bước, phạm vi và yêu cầu dừng sau bước đó. Ví dụ:
-   ```jsx
-   <button block onClick={() => GenUI.issueNewTurn("PHÊ DUYỆT THỰC THI: Job <job-id>; Giai đoạn 2; Bước 08 — Nhận dạng lời thoại. Chỉ thực hiện bước 08, kiểm tra, lưu checkpoint và báo cáo; không chạy bước 09.")}>Thực thi bước 08</button>
-   ```
-4. Chỉ câu xác nhận rõ số bước hoặc click nút mới là phê duyệt. “Tiếp tục”, “làm đi”, “chạy toàn bộ” hoặc duyệt một giai đoạn không phải phê duyệt các bước.
-5. Sau khi thực hiện **một bước duy nhất**, xác minh kết quả, cập nhật state và append-only approval log, báo `pass / partial / blocked / stale`, bằng chứng, tệp, số liệu, lỗi và giới hạn; sau đó **dừng**.
-6. Chỉ sau báo cáo mới hiển thị một nút cho bước pending kế tiếp. Không chạy xuyên bước hoặc tự thực hiện bước kế tiếp dù cùng giai đoạn.
-7. Nếu `partial`/`blocked`, dừng tại bước đó, giải thích blocker và chỉ đề nghị bổ sung thông tin hoặc duyệt chạy lại đúng bước. Không bỏ qua để chạy bước sau.
-8. Nếu cần chạy lại bước đã `pass`, nêu lý do, dùng version/artefact mới và xin duyệt lại. Khi upstream thay đổi, đánh dấu downstream `stale`.
-9. Các thao tác bootstrap ngoài danh sách 40 bước (tạo workspace, nhập workspace cũ, cài dependency, tải model/cache, copy logo) phải có kế hoạch và phê duyệt riêng theo từng thao tác/nhóm có phạm vi rõ.
-10. Phê duyệt bước không bao gồm xóa/ghi đè, crop/mask không phục hồi, cài hệ thống/driver, tải lớn/chi phí, chuyển dữ liệu ra ngoài, chia sẻ hoặc xuất bản; những việc này cần xác nhận riêng.
-11. Kiểm tra process/tool call đang chạy trước khi chạy lại; không có hai phiên cùng ghi state. Nếu UI không hỗ trợ nút, yêu cầu câu xác nhận rõ số bước.
-12. Dùng approval log append-only; ghi approval và completion cho từng bước. Không lưu credential, email, device/link/session IDs.
+## Phê duyệt từng bước
+Tuân thủ `../SKILL.md` và `APPROVAL-GUARD.md`: mỗi bước 01–40 là một đơn vị phê duyệt. Sau bootstrap đã duyệt, dùng `resume` → `prepare` → hiển thị duy nhất một nút gửi nguyên văn `expected_text` → chờ lượt người dùng → `start` → chỉ thực hiện bước đã được cấp `attempt_id` → kiểm tra evidence → `finish` → báo cáo → dừng. Không gọi `start` cho bước sau trong cùng lượt. Partial/blocked phải thử lại đúng bước với yêu cầu mới; running phải xác minh process thực tế; evidence đổi phải dừng và xin duyệt invalidate. Không dùng lệnh `mark` cũ, không tự tạo lời phê duyệt. Transcript-only kết thúc ở bước 09; full-review kết thúc ở 40, bước 40 chỉ thực hiện nếu người dùng yêu cầu YouTube (nếu không, xin duyệt ghi skipped có lý do). Bootstrap, cài đặt, tải lớn, xóa/ghi đè, crop không phục hồi, chia sẻ/xuất bản vẫn cần phê duyệt riêng. Không QC1.
 
 ## Giai đoạn 1 — Tiếp nhận và chuẩn bị (01–06)
 01. Xác minh máy đã chọn còn online; xác minh thư mục/file phim và quyền đọc; nếu Review đầy đủ thì xác minh thêm logo. Xác định job hiện tại hoặc đề xuất job mới.

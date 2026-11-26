@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "job_id": null,
   "source_path": null,
   "source_fingerprint": null,
@@ -9,8 +9,17 @@
   "server_profile_snapshot": null,
   "channel_profile_snapshot": null,
   "overrides": {},
-  "sampling": {"initial_seconds": 5, "verification_seconds": 1},
-  "permissions": {"source_use_rights": "unverified", "external_transfer": false, "publish": false},
+  "sampling": {
+    "initial_seconds": 5,
+    "verification_seconds": 1
+  },
+  "permissions": {
+    "source_use_rights": "unverified",
+    "external_transfer": false,
+    "publish": false
+  },
   "preserve_source": true,
-  "mode": "stage-by-stage-or-full-as-requested"
+  "mode": "transcript-only",
+  "approval_policy": "per-step-single-use",
+  "config_fingerprint": null
 }

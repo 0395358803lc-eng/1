@@ -31,15 +31,10 @@
 - Test thực tế sau cài: import, load/infer offline nếu cache đầy đủ, 2–10s decode/encode, scene detect, smoke test TTS/ASR nếu có. Không đánh pass chỉ vì package xuất hiện trong danh sách.
 
 ## Phê duyệt từng bước — bắt buộc
-- Mỗi bước được đánh số 01–40 là một đơn vị phê duyệt độc lập. Giai đoạn chỉ là nhóm tổ chức, không phải đơn vị cấp quyền; không dùng nút `Thực thi Giai đoạn N`.
-- Trước mỗi bước, trình bày số bước, mục tiêu, đầu vào, thao tác, đầu ra, rủi ro và phạm vi thay đổi; sau đó chỉ hiển thị một nút `Thực thi bước NN`.
-- Callback nút dùng `GenUI.issueNewTurn(...)`, gửi câu xác nhận gồm job, giai đoạn, số bước và chỉ thị không chạy bước kế tiếp. Nếu UI không hỗ trợ, yêu cầu câu xác nhận bằng văn bản nêu rõ bước.
-- Chỉ chạy bước được duyệt. Sau khi hoàn tất, kiểm tra kết quả, lưu checkpoint/approval log, báo `pass / partial / blocked / stale`, bằng chứng, tệp, số liệu, lỗi và giới hạn; rồi dừng.
-- Sau báo cáo mới hiện nút cho bước pending kế tiếp. Không tự chạy bước kế tiếp dù cùng giai đoạn hoặc khi người dùng từng yêu cầu “chạy toàn bộ”.
-- Nếu bước bị block/partial, dừng ở đó. Chỉ cho phép bổ sung thông tin hoặc duyệt chạy lại đúng bước; không bỏ qua. Bước pass chỉ chạy lại khi nêu lý do và xin duyệt lại.
-- Các thao tác bootstrap ngoài 40 bước (tạo workspace, nhập workspace, cài dependencies, tải model/cache, copy logo) có phê duyệt riêng theo từng thao tác hoặc nhóm có phạm vi cụ thể.
-- Phê duyệt một bước không bao gồm xóa/ghi đè, crop/mask không phục hồi, cài hệ thống/driver, download lớn/chi phí, chuyển dữ liệu ra ngoài, chia sẻ hoặc xuất bản; các hành động này cần xác nhận riêng.
-- Lưu `approval_log.json` append-only với `scope_type: step|bootstrap`, `stage_number`, `step_number` (nếu là bước), phạm vi, văn bản xác nhận, thời điểm, trạng thái, evidence paths và notes. Ghi cả sự kiện bắt đầu và kết quả hoàn tất; không lưu ID thiết bị/tài khoản hoặc token.
+- Dùng hợp đồng `APPROVAL-GUARD.md` và script v1.4 cho mọi bước số 01–40. Mỗi lượt chỉ `start` đúng một bước sau khi người dùng gửi chính xác yêu cầu hiện hành; nút gửi `expected_text` do `prepare` tạo, không dùng mẫu tĩnh. Nếu script từ chối, không thực thi media.
+- Sau `finish`, báo cáo evidence, file, số liệu, lỗi/giới hạn và dừng. Chỉ hiện nút cho bước tiếp theo hợp lệ hoặc thử lại bước lỗi. Không dùng `mark` cũ hoặc sửa state trực tiếp.
+- Không ghi log thủ công cho các sự kiện step do script tạo. Bootstrap có log riêng; mọi writer của `approval_log.json` phải dùng cùng khóa `state.json.lock` và bảo toàn sự kiện cũ. Không xóa lock khi chưa xác minh tiến trình đã dừng. Nếu sync log thất bại, dừng; chạy `resume` để đối chiếu, không tự chạy lại media.
+- Tạo/nhập workspace, cài dependencies, tải model/cache, copy logo, xóa/ghi đè, crop/mask không phục hồi, cài hệ thống/driver, tải lớn/chi phí, chuyển dữ liệu ra ngoài, chia sẻ hoặc xuất bản cần xác nhận riêng; cổng step không cấp các quyền này.
 
 ## Kỹ thuật và an toàn vận hành
 - Dùng công cụ remote/local đã kết nối và được cấp quyền. Với Remote Desktop Commander, khám phá đúng action hiện tại; đọc OS và shell. Windows thường dùng PowerShell, Linux/macOS dùng shell phù hợp. Quote đường dẫn có dấu/khoảng trắng; ưu tiên subprocess argument list. Tool trả ảnh phải chuyển block ảnh để ChatGPT nhìn; không dựa vào tên file.
@@ -59,4 +54,4 @@
 - Render: encoder đã smoke-test; temp file + validate + rename; ffprobe và decode đầy đủ; giữ version cũ.
 
 ## Scripts hỗ trợ
-`scripts/workflow_state.py` tạo state 40 bước, ghi checkpoint có evidence, resume và invalidate; không tự kết nối hoặc chạy media. `scripts/check_timeline.py` kiểm tra JSON timeline theo frame, không thay QC trực quan. Đọc source trước khi chạy. Pipeline ASR/TTS/render phải adapt theo môi trường thật.
+`scripts/workflow_state.py` là cổng phê duyệt/checkpoint v2; đọc `APPROVAL-GUARD.md`. Không tự kết nối hoặc chạy media. `scripts/check_timeline.py` kiểm tra JSON timeline theo frame, không thay QC trực quan. Đọc source trước khi chạy. Pipeline ASR/TTS/render phải adapt theo môi trường thật.

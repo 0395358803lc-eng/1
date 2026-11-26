@@ -51,23 +51,8 @@ Không copy phim nguồn vào workspace theo mặc định; config lưu source p
 ## Nhập workspace cũ
 `migration_report.json` ghi source_workspace, import_id, inspected_at, file_manifest, source/config fingerprint comparisons, imported/skipped/stale artefacts, destination paths, conflicts, reasons và approval reference. Nhập không overwrite; file trùng tên được giữ trong namespace/version riêng. Giữ nguyên workspace cũ. Artefact sai fingerprint chỉ được lưu tham khảo và phải đánh stale.
 
-## Approval log — từng bước
-`approval_log.json` là danh sách sự kiện append-only. Mỗi bước có thể có sự kiện bắt đầu và hoàn tất, không ghi đè sự kiện trước đó. Mẫu:
-```json
-{
-  "approval_id": "opaque-local-id",
-  "scope_type": "step",
-  "stage_number": 2,
-  "step_number": 8,
-  "scope_description": "Nhận dạng lời thoại bằng Faster-Whisper",
-  "user_approval_text": "PHÊ DUYỆT THỰC THI ...",
-  "approved_at": "ISO-8601",
-  "status": "started|pass|partial|blocked|stale",
-  "evidence_paths": [],
-  "notes": ""
-}
-```
-Với thao tác bootstrap dùng `scope_type: "bootstrap"`, `step_number: null` và mô tả chính xác thao tác/phạm vi đã duyệt. Không lưu credentials, email hoặc ID thiết bị/tài khoản.
+## Approval log — từng bước (v2)
+`approval_log.json` là danh sách sự kiện append-only, do guard tự đồng bộ từ `state.json.events`. Mỗi lần chạy có `started` và một kết quả `pass|partial|blocked|skipped`, cùng `approval_id`, `event_id` duy nhất, `job_id`, `scope_type: step`, `stage_number`, `step_number`, `scope_description`, `user_approval_text`, `approved_at`, `timestamp`, `status`, `evidence_paths`, `notes`. Bootstrap ghi `scope_type: bootstrap`, mô tả, xác nhận và bằng chứng riêng; phải bảo toàn sự kiện cũ, dùng cùng khóa ghi. Không lưu credentials, email hoặc ID thiết bị/tài khoản. State là nguồn chính của event step; log có thể được phục hồi idempotent sau gián đoạn bằng `resume`. Không sửa các event đã lưu.
 
 ## Timeline JSON (cho script check_timeline.py)
 ```json
@@ -75,8 +60,8 @@ Với thao tác bootstrap dùng `scope_type: "bootstrap"`, `step_number: null` v
 ```
 `fps` có thể là số hoặc phân số string. Frame end exclusive. Nếu speed khác 1, source span/speed phải khớp review duration trong dung sai. Script hỗ trợ hard-cut liên tục; transition overlap cần validate bổ sung. Không lấy output helper làm bằng chứng nội dung khớp.
 
-## State
-`workflow_state.py init --state PATH --job-id ID --source-fingerprint FINGERPRINT` tạo 40 bước pending, không overwrite. `mark --state PATH --step 9 --status pass --evidence FILE --note ...` chỉ dùng pass khi kiểm tra thật. `resume` tìm bước chưa đạt đầu tiên; `invalidate --from-step N --note REASON` đánh stale downstream, giữ lịch sử. ChatGPT kiểm tra fingerprints và invalidate có chủ ý. Không có hai phiên cùng ghi một state. State là checkpoint kỹ thuật; approval log mới là bằng chứng người dùng đã phê duyệt từng bước.
+## State v2
+Đọc `APPROVAL-GUARD.md` để biết lệnh và quy tắc. State gồm `schema_version: 2`, `job_id`, `mode`, `source_fingerprint`, `config_fingerprint`, `steps` (40 dòng), `request`, `events`, `history`, `updated_at`. Trạng thái: `pending`, `waiting_approval`, `running`, `pass`, `partial`, `blocked`, `stale`, `skipped`, `out_of_scope`. `request` chứa id, step, scope, expected_text, created_at; khi start được duyệt, request bị tiêu thụ, attempt chứa id, scope, approval_text và approved_at. `finish` chỉ nhận attempt đang running. Không tái sử dụng phê duyệt. Bước 10–40 out_of_scope trong Transcript-only. State v1 giữ nguyên; tạo job v2 riêng sau khi xin duyệt, không suy diễn quyền cũ. Config fingerprint được tính từ snapshot cấu hình ổn định, không tính trường fingerprint của chính nó. Không có hai phiên cùng ghi state/log.
 
 ## Báo cáo bàn giao
-Kèm đường dẫn file đã kiểm tra, size/duration/frame/codec/resolution/fps, audio/stems, subtitle, thumbnail/metadata, status 8 gates, phạm vi QC, lỗi tồn tại, quyết định chưa được duyệt, nguồn giữ nguyên và quyền xuất bản chưa kiểm chứng. Không dùng số liệu ví dụ làm số liệu job.
+Kèm đường dẫn file đã kiểm tra, size/duration/frame/codec/resolution/fps, audio/stems, subtitle, thumbnail/metadata, trạng thái các cổng QC2–QC8 nếu áp dụng, phạm vi QC, lỗi tồn tại, quyết định chưa được duyệt, nguồn giữ nguyên và quyền xuất bản chưa kiểm chứng. Không dùng số liệu ví dụ làm số liệu job.

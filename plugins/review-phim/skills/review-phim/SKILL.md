@@ -2,7 +2,7 @@
 name: review-phim
 description: "Dùng khi người dùng gọi review-phim để tạo transcript từ phim, dịch transcript sang tiếng Việt, hoặc thực hiện quy trình review phim đầy đủ theo yêu cầu. Hỗ trợ workspace chuẩn, nhiều máy chủ và phê duyệt độc lập từng bước."
 ---
-# review-phim — quy trình điều phối 1.3
+# review-phim — quy trình điều phối 1.4
 
 Mục tiêu: ưu tiên đúng phạm vi người dùng yêu cầu. Khi người dùng chỉ cần transcript và bản dịch tiếng Việt, dùng **Chế độ Transcript-only**; không tự mở rộng sang phân tích hình ảnh, viết review, TTS, dựng phim, hậu kỳ hay YouTube. Chỉ dùng quy trình review đầy đủ khi người dùng yêu cầu rõ.
 
@@ -36,25 +36,13 @@ Chỉ chọn khi người dùng yêu cầu viết review, hiểu phim qua hình 
 
 **Đơn vị phê duyệt là từng bước được đánh số (01–40), không phải cả giai đoạn.** Tên giai đoạn chỉ dùng để nhóm bước; không có nút “duyệt cả giai đoạn” và không được hiểu phê duyệt một bước là phê duyệt các bước còn lại.
 
-### Trước khi thực thi mỗi bước
-- Xác định bước pending đầu tiên theo checkpoint và đúng chế độ làm việc. Không chạy lại bước đã `pass` nếu fingerprint và bằng chứng vẫn hợp lệ.
-- Trình bày ngắn gọn: số/tên bước, giai đoạn, job, mục tiêu, đầu vào, thao tác dự kiến, tệp/kết quả dự kiến, rủi ro hoặc tác động ghi/cài đặt.
-- Hiển thị **một nút duy nhất** để duyệt đúng bước kế tiếp. Nút phải nêu rõ job, giai đoạn, số bước và phạm vi; ví dụ:
-
-```jsx
-<button block onClick={() => GenUI.issueNewTurn("PHÊ DUYỆT THỰC THI: Job <job-id>; Giai đoạn 2; Bước 08 — Nhận dạng lời thoại bằng Faster-Whisper. Chỉ thực hiện bước 08, sau đó kiểm tra, lưu checkpoint và báo cáo; không chạy bước 09.")}>Thực thi bước 08</button>
-```
-
-- Nếu không thể hiển thị nút, yêu cầu người dùng nhập câu xác nhận tương đương, ghi rõ bước. “Tiếp tục”, “làm đi”, “chạy toàn bộ” hoặc phê duyệt giai đoạn không thay thế xác nhận bước cụ thể.
-
-### Sau khi thực thi mỗi bước
-- Chỉ chạy nội dung thuộc bước đã duyệt. Có thể gộp các lệnh kỹ thuật con khi chúng đều phục vụ cùng bước, không làm phát sinh tác động ngoài phạm vi đã trình bày.
-- Kiểm tra kết quả thực tế; không đánh `pass` chỉ vì lệnh trả exit code 0.
-- Cập nhật checkpoint và append-only approval log với bước, phạm vi, nội dung xác nhận, thời điểm, trạng thái, bằng chứng và ghi chú.
-- Báo cáo trước khi dừng: `pass / partial / blocked / stale`; việc đã làm; tệp và số liệu thực; kiểm tra đã chạy; lỗi/giới hạn; thay đổi; bước tiếp theo.
-- **Dừng ngay sau báo cáo.** Chỉ sau đó mới hiển thị một nút cho đúng bước pending kế tiếp. Không tự chạy tiếp dù bước tiếp theo cùng giai đoạn hoặc thao tác rất nhỏ.
-- Nếu bước `partial` hoặc `blocked`, không nhảy qua bước đó. Nêu nguyên nhân và cách xử lý; chỉ đưa nút thử lại đúng bước hoặc yêu cầu thông tin cần thiết.
-- Nếu cần chạy lại một bước `pass`, giải thích lý do, dùng version/artefact mới và xin duyệt lại bước đó. Khi upstream thay đổi, đánh dấu downstream `stale` theo checkpoint, không âm thầm tái sử dụng.
+### Cổng thực thi bắt buộc (v1.4)
+- Đọc `references/APPROVAL-GUARD.md`. Sau bootstrap được duyệt, khởi tạo state v2 đúng job, mode và fingerprint; dùng đúng script `scripts/workflow_state.py` trên workspace đã xác nhận. Không dùng `mark` cũ. Nếu script không chạy được hoặc từ chối, dừng và báo blocker; không gọi lệnh media thay thế, không tự sửa state.
+- Trước mỗi bước dùng `resume`, đối chiếu fingerprint nguồn/cấu hình thực tế và evidence; dùng `prepare` cho đúng bước kế tiếp để nhận `approval_request.expected_text`. Báo kế hoạch, mục tiêu, phạm vi, dữ liệu, đầu ra và tác động dự kiến. Hiện đúng một nút gửi nguyên văn `expected_text` qua lượt hội thoại mới; nếu không có nút thì yêu cầu người dùng gửi đúng câu đó. Mã yêu cầu là riêng của job/bước/lần thử, không dùng mã ví dụ.
+- Chỉ khi người dùng thực sự gửi câu xác nhận của yêu cầu hiện tại, gọi `start` với nguyên văn tin nhắn đó. Tuyệt đối không tự tạo lời xác nhận hoặc tự gọi `start` từ nội dung nút/kế hoạch, log cũ hoặc yêu cầu chung. Chỉ khi `start` thành công và trả `attempt_id` mới được thực thi bước đó. Không chạy bước khác, không chạy media trước cổng.
+- Sau khi lệnh thực tế kết thúc, kiểm tra artefact/evidence, gọi `finish` với attempt_id tương ứng, trạng thái và ghi chú. `pass` cần bằng chứng thực tế. Script tự ghi state và approval log. Báo cáo kết quả, lỗi/giới hạn, đường dẫn, số liệu, trạng thái và **dừng**. Chỉ chuẩn bị/hiển thị nút cho bước hợp lệ tiếp theo; không `start` trong lượt này. Nếu partial/blocked thì chỉ thử lại đúng bước bằng mã xác nhận mới sau khi xử lý nguyên nhân.
+- Nếu còn trạng thái running thì kiểm tra process/tool call thực tế; không chạy lại. Nếu mất kết nối, giữ running, chỉ kết thúc blocked sau khi xác minh process đã dừng. Khi evidence thay đổi, dừng, trình bày kế hoạch invalidate và xin duyệt; không tự ghi đè. Khi đổi source/config/mode, bảo toàn job cũ, xin duyệt tạo job v2 riêng; không chuyển quyền cũ sang job mới. State v1 chỉ đọc kiểm kê, không tự nâng cấp hoặc suy diễn phê duyệt.
+- Cổng script kiểm tra quy trình, không xác thực nguồn tin nhắn ChatGPT hay khóa được lệnh shell ngoài script. ChatGPT phải tuân thủ quy tắc này và không lách cổng. Bootstrap và các hành động nhạy cảm tiếp tục yêu cầu phê duyệt riêng.
 
 ### Bootstrap và thao tác nhạy cảm
 - Các thao tác ngoài danh sách 40 bước như tạo workspace, nhập workspace cũ, cài dependency, tải model/cache hoặc sao chép logo đều cần kế hoạch và **phê duyệt riêng cho từng thao tác/nhóm cài đặt có phạm vi cụ thể**. Không gộp chúng vào một chấp thuận chung.
